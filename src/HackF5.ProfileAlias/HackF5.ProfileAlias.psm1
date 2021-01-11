@@ -151,8 +151,13 @@ function Remove-ProfileAlias {
             If no profile alias with this name exists then an error is raised. 
     #>
     param (
-        [Parameter(Mandatory=$true)] [String] $Name
+        [Parameter(Mandatory=$true, ValueFromPipelineByPropertyName, ValueFromPipeline)] [String] $Name
     )
+
+    if ([System.String]::IsNullOrWhiteSpace($Name))
+    {
+        return
+    }
 
     $jsonPath = Get-ProfileAliasJsonPath
     $json = Get-Content $jsonPath | ConvertFrom-Json
@@ -215,8 +220,104 @@ function Get-ProfileAlias {
     Write-Output $json.aliases
 }
 
+function Get-ProfileAliasInitializeCommand {
+    $builder = New-Object System.Text.StringBuilder("")
+    $null = $builder.AppendLine("# region profile alias initialize")
+    $null = $builder.AppendLine("Import-Module -Name HackF5.ProfileAlias -Force -Global")
+    $null = $builder.AppendLine("# end region")
+
+    return $builder.ToString().Trim()
+}
+
+function Register-ProfileAliasInProfile {
+    <#
+        .SYNOPSIS 
+            Registers the HackF5.ProfileAlias module into a PowerShell profile.
+
+        .DESCRIPTION
+            Your aliases are registered by this module when the module first loads, however
+            PowerShell's auto-loading strategy is lazy, meaning that the module is not
+            loaded until it is first used. Since you want your aliases always available
+            then it is necessary to explicitly load the module as part of profile initialization.
+
+            Invoking this command appends an explicit load request to your profile
+
+        .PARAMETER Path
+            The path to your profile.
+            
+            When not set this defaults to the currently loaded profile, which is probably what
+            you want.
+
+        .EXAMPLE
+            Register-ProfileAliasInProfile
+                Adds an explicit load module request to your current profile.
+
+        .NOTES
+            This function is idempotent, so calling it multiple times will not result in multiple registrations.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param (
+        [Parameter()] [String] $Path = $null
+    )
+
+    if ([System.String]::IsNullOrWhiteSpace($Path)) {
+        $Path = $profile
+    }
+
+    $profileContent = (Test-Path $Path) ? (Get-Content -Path $Path -Raw) ?? [System.String]::Empty : [System.String]::Empty
+    $command = Get-ProfileAliasInitializeCommand
+    if ($profileContent.Contains($command)) {
+        Write-Verbose -Message "The HackF5.ProfileAlias module has already been registered in profile: $Path"
+        return
+    }
+
+    $profileContent = $profileContent.TrimEnd()
+
+    $builder = New-Object System.Text.StringBuilder($profileContent)
+    if ($builder.Length -gt 0) {
+        $null = $builder.AppendLine()
+        $null = $builder.AppendLine()
+    }
+
+    $null = $builder.AppendLine($command)
+    
+    if ($PSCmdlet.ShouldProcess("$Path" , "Register HackF5.ProfileAlias in ")) {
+        Set-Content -Path $Path -Value $builder.ToString().TrimEnd() -NoNewline -Confirm:$false
+        Write-Verbose -Message "Registered HackF5.ProfileAlias in profile: $Path"
+    }
+}
+
+function Unregister-ProfileAliasInProfile {
+    param (
+        [Parameter()] [String] $Path
+    )
+
+    if ([System.String]::IsNullOrWhiteSpace($Path))
+    {
+        $Path = $profile
+    }
+
+    if (-not (Test-Path $Path)) {
+        Write-Verbose -Message "The profile $Path does not exists."
+        return
+    }
+
+    $command = Get-ProfileAliasInitializeCommand
+    $profileContent = (Get-Content -Path $Path -Raw).Replace($command, [System.String]::Empty).TrimEnd()
+    Set-Content -Path $profile -Value  $profileContent -NoNewline
+
+    Write-Verbose -Message "Unregistered HackF5.ProfileAlias in profile: $Path"
+}
+
+
 Export-ModuleMember Set-ProfileAlias
 Export-ModuleMember Remove-ProfileAlias
 Export-ModuleMember Get-ProfileAlias
+Export-ModuleMember Register-ProfileAliasInProfile
+Export-ModuleMember Unregister-ProfileAliasInProfile
 
 Import-ProfileAliasModule
+
+$MyInvocation.MyCommand.ScriptBlock.Module.OnRemove = {
+    Get-ProfileAlias | Remove-ProfileAlias -ErrorAction SilentlyContinue
+}
