@@ -12,12 +12,7 @@ function Get-ProfileAliasJsonPath {
     return Join-Path -Path (Get-ProfileAliasDataDirectory) -ChildPath "HackF5.ProfileAlias.json"
 }
 
-function Import-ProfileAlias {
-    $path = Get-ProfileAliasJsonPath
-    return (Test-Path -Path $path) ? (Get-Content $path | ConvertFrom-Json) : @()
-}
-
-function Export-ProfileAlias {
+function Save-ProfileAlias {
     param (
         [Parameter(Mandatory=$true)] [AllowEmptyCollection()] [Array] $Aliases
     )
@@ -133,7 +128,7 @@ function Set-ProfileAlias {
     $aliases += $alias
 
     if ($PSCmdlet.ShouldProcess($jsonPath , "Set profile alias $Name in ")) {
-        Export-ProfileAlias $aliases
+        Save-ProfileAlias $aliases
         Write-Verbose "Set profile alias $Name to $Command"
         return $alias
     }
@@ -176,7 +171,7 @@ function Remove-ProfileAlias {
     $aliases = @($aliases | Where-Object {$_.name -ne $Name})
 
     if ($PSCmdlet.ShouldProcess($jsonPath, "Remove profile alias $Name from ")) {
-        Export-ProfileAlias $aliases
+        Save-ProfileAlias $aliases
         Write-Verbose "Removed profile alias $Name"
     }
 }
@@ -218,13 +213,14 @@ function Get-ProfileAlias {
             https://github.com/hackf5/powershell-profile-alias
     #>
     
-    return Import-ProfileAlias
+    $path = Get-ProfileAliasJsonPath
+    return (Test-Path -Path $path) ? (Get-Content $path | ConvertFrom-Json) : @()
 }
 
 function Get-ProfileAliasRegisterCommand {
     $builder = New-Object System.Text.StringBuilder("")
     $null = $builder.AppendLine("# region profile alias initialize")
-    $null = $builder.AppendLine("Import-Module -Name HackF5.ProfileAlias -Force -Global")
+    $null = $builder.AppendLine("Import-Module -Name HackF5.ProfileAlias -Force -Global -ErrorAction SilentlyContinue")
     $null = $builder.AppendLine("# end region")
 
     return $builder.ToString().Trim()
