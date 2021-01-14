@@ -17,9 +17,10 @@ Describe "Profile Alias: Groups" {
         Get-ProfileAliasGroup | Should -Be "foo"
     }
 
-    It "Can set a profile group" {
+    It "Removing the current group reverts to the default group" {
         Set-ProfileAliasGroup "foo"
-        Get-ProfileAliasGroup | Should -Be "foo"
+        Remove-ProfileAliasGroup "foo"
+        Get-ProfileAliasGroup | Should -Be "default"
     }
 }
 
@@ -32,8 +33,16 @@ Describe "Profile Alias: Aliases" {
         Remove-ProfileAliasGroup "test"
     }
 
-    It "Set alias" {
-        Set-ProfileAlias -Name np -Command notepad.exe
-        (Get-ProfileAlias np).Command | Should -Be "notepad.exe"
+    It "Can set a PowerShell style alias" {
+        Set-ProfileAlias -Name e -Command echo
+        (Get-ProfileAlias e).Command | Should -Be "echo"
+        e foo | Should -Be "foo"
+    }
+
+    It "Can remove a PowerShell style alias" {
+        Set-ProfileAlias -Name e -Command echo
+        Remove-ProfileAlias e
+        Get-Alias e
+        $Error.Count | Should -BeGreaterThan 0
     }
 }
