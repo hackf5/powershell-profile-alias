@@ -12,7 +12,7 @@ New-Variable ProfileAliasDataDirectory -Visibility Private -Option Constant `
 
 New-Variable DefaultProfileAliasGroup -Visibility Private -Option Constant -Value "default"
 
-$script:ProfileAliasGroup = $DefaultProfileAliasGroup
+$script:ProfileAliasGroup = "default"
 
 function Get-ProfileAliasDataDirectory {
     param (
@@ -125,7 +125,11 @@ function Get-CommandFunctionBody {
     
     $maxIndex += 1
 
-    return  $Command -replace $pattern, '$args[$1]' -replace '#{1}\{\*\}', '$args' -replace '#{1}\{:\*\}', "`$args[$maxIndex..10000]"
+    $builder = New-Object System.Text.StringBuilder('$argsproxy = $args');
+    $null = $builder.AppendLine();
+    $body = $Command -replace $pattern, '$argsproxy[$1]' -replace '#{1}\{\*\}', '$argsproxy' -replace '#{1}\{:\*\}', "`$argsproxy[$maxIndex..10000]"
+    $null = $builder.AppendLine($body);
+    return $builder.ToString().Trim();
 }
 
 function Update-ProfileAliasModule {
@@ -138,7 +142,9 @@ function Update-ProfileAliasModule {
 
         if ($alias.Bash) {
             $functionName = "Publish-ProfileAliasGenerated_$($alias.name)"
-            $null = $moduleBuilder.AppendLine("function $functionName { $($alias.body) }");
+            $null = $moduleBuilder.AppendLine("function $functionName {");
+            $null = $moduleBuilder.AppendLine($alias.body);
+            $null = $moduleBuilder.AppendLine("}");
             $null = $moduleBuilder.AppendLine("Set-Alias -Name $($alias.name) -Value $functionName -Scope Global -Option ReadOnly -Force");
         }
         else {

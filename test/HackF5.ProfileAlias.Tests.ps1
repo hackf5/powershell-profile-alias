@@ -120,4 +120,9 @@ Describe "Profile Alias: Bash style Aliases" {
         Set-ProfileAlias -Name myalias1 -Command 'echo "hello $(#{*}) world"' -Bash
         myalias1 lovely shiny | Should -Be "hello lovely shiny world"
     }
+
+    It "Foo" {
+        Set-ProfileAlias myalias1 '@(#{:*}) | where { $_ -ne #{0} }' -Bash
+        myalias1 2 1 2 3 4 | Should -Be @(1, 3, 4)
+    }
 }
