@@ -24,7 +24,7 @@ Describe "Profile Alias: Groups" {
     }
 }
 
-Describe "Profile Alias: Aliases" {
+Describe "Profile Alias: PowerShell style Aliases" {
     BeforeEach {
         Set-ProfileAliasGroup "test"
     }
@@ -44,5 +44,28 @@ Describe "Profile Alias: Aliases" {
         Remove-ProfileAlias e
         Get-Alias e
         $Error.Count | Should -BeGreaterThan 0
+    }
+
+    It "Cannot overwrite an existing alias without Force switch" {
+        Set-Alias myalias echo
+        Set-ProfileAlias myalias date
+        $Error.Count | Should -BeGreaterThan 0
+        Remove-Alias myalias
+    }
+
+    It "Can overwrite an existing alias with Force switch" {
+        Set-Alias myalias date
+        Set-ProfileAlias myalias echo -Force
+        myalias hello | Should -Be "hello"
+    }
+}
+
+Describe "Profile Alias: Bash style Aliases" {
+    BeforeEach {
+        Set-ProfileAliasGroup "test"
+    }
+    
+    AfterEach {
+        Remove-ProfileAliasGroup "test"
     }
 }

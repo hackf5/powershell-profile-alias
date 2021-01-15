@@ -1,7 +1,7 @@
 New-Variable GeneratedProfielAliasModuleName -Visibility Private -Option Constant `
     -Value "HackF5.ProfileAlias.Generated"
 
-New-Variable ProfielAliasJsonName -Visibility Private -Option Constant `
+New-Variable ProfileAliasJsonName -Visibility Private -Option Constant `
     -Value "HackF5.ProfileAlias.json"
 
 New-Variable ProfileAliasDataDirectory -Visibility Private -Option Constant `
@@ -12,7 +12,7 @@ New-Variable ProfileAliasDataDirectory -Visibility Private -Option Constant `
 
 New-Variable DefaultProfileAliasGroup -Visibility Private -Option Constant -Value "default"
 
-$script:ProfileAliasGroup = Get-Variable DefaultProfileAliasGroup -ValueOnly
+$script:ProfileAliasGroup = $DefaultProfileAliasGroup
 
 function Get-ProfileAliasDataDirectory {
     param (
@@ -47,7 +47,7 @@ function Remove-ProfileAliasGroup {
 
     if ($Group -eq $DefaultProfileAliasGroup)
     {
-        Write-Error "You cannot remove the default group"
+        Write-Error "You cannot remove the default group."
         return
     }
 
@@ -65,7 +65,7 @@ function Remove-ProfileAliasGroup {
 }
 
 function Get-ProfileAliasJsonPath {
-    return Join-Path -Path (Get-ProfileAliasDataDirectory) -ChildPath $ProfielAliasJsonName
+    return Join-Path -Path (Get-ProfileAliasDataDirectory) -ChildPath $ProfileAliasJsonName
 }
 
 function Save-ProfileAlias {
@@ -86,9 +86,19 @@ function Get-CommandFunctionBody {
         [Parameter(Mandatory=$true)] [string] $Command
     )
 
-    $body = $Command -replace '#{1}\{(\d+)\}', '$args[$1]' -replace '#{1}\{\*\}', '$args'
+    $pattern = '#{1}\{(\d+)\}'
+
+    $maxIndex = -1
+    foreach ($m in [regex]::Matches($Command, $pattern)) {
+        $index = [System.Convert]::ToInt32($m.Groups[1].Value)
+        if ($index -gt $maxIndex) {
+            $maxIndex = $index
+        }
+    }
     
-    return  $body
+    $maxIndex += 1
+
+    return  $Command -replace $pattern, '$args[$1]' -replace '#{1}\{\*\}', '$args' -replace '#{1}\{:\*\}', "`$args[$maxIndex..10000]"
 }
 
 function Update-ProfileAliasModule {
@@ -102,14 +112,14 @@ function Update-ProfileAliasModule {
         if ($alias.Bash) {
             $functionName = "Publish-ProfileAliasGenerated_$($alias.name)"
             $null = $moduleBuilder.AppendLine("function $functionName { $($alias.body) }");
-            $null = $moduleBuilder.AppendLine("Set-Alias -Name $($alias.name) -Value $functionName -Scope Global -Option ReadOnly");
+            $null = $moduleBuilder.AppendLine("Set-Alias -Name $($alias.name) -Value $functionName -Scope Global -Option ReadOnly -Force");
         }
         else {
-            $null = $moduleBuilder.AppendLine("Set-Alias -Name $($alias.name) -Value $($alias.command) -Scope Global -Option ReadOnly");
+            $null = $moduleBuilder.AppendLine("Set-Alias -Name $($alias.name) -Value $($alias.command) -Scope Global -Option ReadOnly -Force");
         }
 
         $null = $onRemoveBuilder.AppendLine();
-        $null = $onRemoveBuilder.AppendLine("Remove-Alias -Name $($alias.name) -Force");
+        $null = $onRemoveBuilder.AppendLine("Remove-Alias -Name $($alias.name) -Force -ErrorAction SilentlyContinue");
     }
 
     $null = $onRemoveBuilder.AppendLine("}");
@@ -412,7 +422,6 @@ function Unregister-ProfileAliasInProfile {
 }
 
 $MyInvocation.MyCommand.ScriptBlock.Module.OnRemove = {
-    Get-ProfileAlias | Remove-ProfileAlias -ErrorAction SilentlyContinue
     Remove-Module $GeneratedProfielAliasModuleName -Force -Confirm:$false -ErrorAction SilentlyContinue
 }
 
