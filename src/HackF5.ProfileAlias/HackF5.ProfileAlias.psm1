@@ -1,4 +1,4 @@
-New-Variable GeneratedProfielAliasModuleName -Visibility Private -Option Constant `
+New-Variable GeneratedProfileAliasModuleName -Visibility Private -Option Constant `
     -Value "HackF5.ProfileAlias.Generated"
 
 New-Variable ProfileAliasJsonName -Visibility Private -Option Constant `
@@ -26,10 +26,27 @@ function Get-ProfileAliasDataDirectory {
 }
 
 function Get-ProfileAliasGroup {
+    <#
+        .SYNOPSIS
+            Gets the current profile alias group.
+
+        .NOTES
+            Groups exist mainly for testing, so you probably don't need to worry about this.
+    #>
     return $script:ProfileAliasGroup
 }
 
 function Set-ProfileAliasGroup {
+    <#
+        .SYNOPSIS
+            Sets the current profile alias group.
+
+        .PARAMETER Group
+            The name of the group to set. When not set reverts to the default group.
+
+        .NOTES
+            Groups exist mainly for testing, so you probably don't need to worry about this.
+    #>
     param (
         [Parameter()] [String] $Group
     )
@@ -41,6 +58,16 @@ function Set-ProfileAliasGroup {
 }
 
 function Remove-ProfileAliasGroup {
+    <#
+        .SYNOPSIS
+            Removes a profile alias group.
+
+        .PARAMETER Group
+            The name of the group to remove.
+
+        .NOTES
+            Groups exist mainly for testing, so you probably don't need to worry about this.
+    #>
     param (
         [Parameter(Mandatory=$true)] [String] $Group
     )
@@ -51,16 +78,16 @@ function Remove-ProfileAliasGroup {
         return
     }
 
-    $path = Get-ProfileAliasDataDirectory $Group
-    if (Test-Path $path)
-    {
-        $null = Remove-Item -Force $path -Recurse 
-    }
-
     if ($script:ProfileAliasGroup -eq $Group)
     {
         Write-Information "Reverting to default profile alias group."
         $null = Set-ProfileAliasGroup $DefaultProfileAliasGroup
+    }
+
+    $path = Get-ProfileAliasDataDirectory $Group
+    if (Test-Path $path)
+    {
+        $null = Remove-Item -Force $path -Recurse 
     }
 }
 
@@ -78,7 +105,7 @@ function Save-ProfileAlias {
 }
 
 function Get-ProfileAliasModulePath {
-    return Join-Path -Path (Get-ProfileAliasDataDirectory) -ChildPath "$GeneratedProfielAliasModuleName.psm1"
+    return Join-Path -Path (Get-ProfileAliasDataDirectory) -ChildPath "$GeneratedProfileAliasModuleName.psm1"
 }
 
 function Get-CommandFunctionBody {
@@ -119,7 +146,7 @@ function Update-ProfileAliasModule {
         }
 
         $null = $onRemoveBuilder.AppendLine();
-        $null = $onRemoveBuilder.AppendLine("Remove-Alias -Name $($alias.name) -Force -ErrorAction SilentlyContinue");
+        $null = $onRemoveBuilder.AppendLine("Remove-Alias -Name $($alias.name) -Scope Global -Force -ErrorAction SilentlyContinue");
     }
 
     $null = $onRemoveBuilder.AppendLine("}");
@@ -129,6 +156,7 @@ function Update-ProfileAliasModule {
 
     $modulePath = Get-ProfileAliasModulePath
     $null = Set-Content -Path $modulePath -Value $moduleBuilder.ToString() -Force -Confirm:$false
+    $null = Remove-Module $GeneratedProfileAliasModuleName -Force -ErrorAction SilentlyContinue
     $null = Import-Module $modulePath -Global -Force
 }
 
@@ -147,6 +175,14 @@ function Set-ProfileAlias {
 
             Or it can be a string containing an executable object along with a predefined
             set of arguments.
+
+            In the case of bash style aliases you need to be able to inject arguments into 
+            the command to be executed, this is done using the following syntax:
+
+            - #{N} injects the Nth argument: $args[N]. Note that N is an array index so starts at 0.
+            - #{*} injects all of the arguments: $args.
+            - #{:*} injects all of the remaining arguments: $args[M..10000] where M is one greater 
+              than the maximal argument of the form #{N}.
 
         .PARAMETER Bash
             This is a bash style alias.
@@ -171,7 +207,7 @@ function Set-ProfileAlias {
             a registry hack that supposedly purports to do this, but good luck with
             that.
 
-            Set-ProfileAlias -Name laws -Command "docker run --network mynet --rm -it -v `$env:userprofile\.aws\localstack:/root/.aws amazon/aws-cli --endpoint-url=http://localstack:4566" -Bash
+            Set-ProfileAlias -Name laws -Bash -Command 'docker run --network mynet --rm -it -v $env:userprofile\.aws\localstack:/root/.aws amazon/aws-cli --endpoint-url=http://localstack:4566 #{*}'
 
             Creates the alias `laws` that allows you run the dockerized aws-cli against your 
             dockerized localstack (yes, this is the posterboy for why PowerShell needs bash style aliases).
@@ -289,7 +325,8 @@ function Get-ProfileAlias {
     #>
     
     $path = Get-ProfileAliasJsonPath
-    return (Test-Path -Path $path) ? (Get-Content $path | ConvertFrom-Json) : @()
+    $aliases = (Test-Path -Path $path) ? (Get-Content $path | ConvertFrom-Json) : @()
+    return $aliases
 }
 
 function Get-ProfileAliasRegisterCommand {
@@ -422,16 +459,16 @@ function Unregister-ProfileAliasInProfile {
 }
 
 $MyInvocation.MyCommand.ScriptBlock.Module.OnRemove = {
-    Remove-Module $GeneratedProfielAliasModuleName -Force -Confirm:$false -ErrorAction SilentlyContinue
+    Remove-Module $GeneratedProfileAliasModuleName -Force -Confirm:$false -ErrorAction SilentlyContinue
 }
 
-Export-ModuleMember Get-ProfileAliasDataDirectory
-Export-ModuleMember Set-ProfileAliasDataDirectory
+Export-ModuleMember Register-ProfileAliasInProfile
+Export-ModuleMember Unregister-ProfileAliasInProfile
+
 Export-ModuleMember Get-ProfileAlias
 Export-ModuleMember Set-ProfileAlias
 Export-ModuleMember Remove-ProfileAlias
-Export-ModuleMember Register-ProfileAliasInProfile
-Export-ModuleMember Unregister-ProfileAliasInProfile
+
 Export-ModuleMember Get-ProfileAliasGroup
 Export-ModuleMember Set-ProfileAliasGroup
 Export-ModuleMember Remove-ProfileAliasGroup
